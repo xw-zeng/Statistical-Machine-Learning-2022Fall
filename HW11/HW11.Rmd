@@ -1,0 +1,109 @@
+---
+title: "HW11"
+author:
+  - xw-zeng
+date: "2022-12-20"
+documentclass: ctexart
+geometry: "left=3.18cm, right=3.18cm, top=2.54cm, bottom=2.54cm"
+output:
+  rticles::ctex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+载入R包。
+```{r, warning=FALSE, message=FALSE}
+library(readxl) # load excel data
+library(ggplot2) # plot beautiful graphs
+library(corrplot) # plot loadings
+library(factoextra) # visualization of clustering
+```
+
+\newpage
+
+# NBA数据降维分析
+
+## 分析任务1
+
+读入NBA数据集。
+```{r}
+data <- read_excel('NBA.xlsx')
+```
+
+对数据集进行标准化，消除量纲的影响。
+```{r}
+data_sc <- data.frame(scale(data[, -1]))
+```
+
+## 分析任务2
+
+使用数据相关系数矩阵的特征值绘制崖底碎石图，在第3个特征值后逐渐变得平缓，因此我们可以选择前3个主成分。
+```{r, fig.cap='崖底碎石图', out.width='70%', fig.align='center'}
+evalues = eigen(cor(data_sc))$values
+ggplot(mapping = aes(x = 1:length(evalues), y = evalues)) +
+  geom_line(linewidth = 0.6) + theme_light() +
+  labs(title = 'Scree Plot', x = 'n', y = 'eigen value')
+```
+
+对所有的自变量进行主成分分析，查看主成分的结果。前3个主成分的累计方差贡献率约为80.78%，能够比较好地解释数据信息。
+```{r}
+pca <- princomp(data_sc)
+summary(pca)
+```
+
+## 分析任务3
+
+查看前3个主成分的载荷，可以认为第一个主成分表示球员的综合属性；第二个主成分在三分投球率、三分命中次数、三分出手次数有很高的载荷，表示三分球的能力；第三个主成分在投篮率、罚球率、三分投球率上有很高的正载荷，在三分命中次数、三分出手次数上有较高的负载荷，表示投篮的效率。其中第二个主成分与三分球能力是负相关关系，第三主成分与投篮效率是负相关关系，因此我们考虑在接下来的分析中对第二、第三主成分得分取相反数，以更好地进行解释。
+```{r, fig.showtext=TRUE, fig.cap='前三个主成分载荷图', fig.width=8, fig.height=5}
+corrplot(t(pca$loadings[, 1:3]), is.corr=TRUE, number.cex=0.5, method='square',
+         addCoef.col="grey30", tl.col="black", tl.cex=0.7, cl.cex=0.7, win.asp = 1.25)
+```
+
+\newpage
+
+计算每一个球员的主成分得分。
+```{r}
+pca_score = data.frame(data$球员, pca$scores[, 1:3])
+colnames(pca_score) = c('球员', '综合能力', '三分球能力', '投篮效率')
+pca_score$三分球能力 = - pca_score$三分球能力
+pca_score$投篮效率 = - pca_score$投篮效率
+head(pca_score)
+```
+
+挑选几位我稍微听说过的球员进行分析。
+```{r}
+pca_score[c(5, 36, 37, 364), ]
+```
+
+奥尼尔和姚明都是中锋，因此很少参与三分球的进攻，三分球能力的得分自然就要弱一些，而库里三分球众所周知非常厉害，因此得分特别高；就投篮效率而言，库里和哈登比较高；最后从综合能力看，奥尼尔的得分最高，其次是库里和哈登，最后是姚明。但姚明分数比较低可能是因为他打季后赛的次数比较少。
+
+## 分析任务4
+
+首先查看最佳kmeans聚类数，发现聚为4类最为合适。
+```{r, out.width='70%', fig.align='center', fig.cap='目标函数与聚类个数折线图'}
+fviz_nbclust(pca_score[, -1], kmeans) + geom_vline(xintercept = 4, linetype = 2)
+```
+
+使用主成分得分对NBA球员进行K-means聚类。
+```{r}
+set.seed(5201314)
+result <- kmeans(scale(pca_score[, -1]), iter.max = 1000, center = 4, nstart = 25)
+```
+
+对聚类结果进行可视化，可以发现区分效果是不错的。红色类别的球员三分球能力在0附近，综合能力为负，投篮效率较高，可以命名为轮换球员；绿色类别的球员综合能力较低，三分球能力为负，投篮效率也为负，可以命名为板凳球员；紫色类别的球员三分球能力、综合能力、投篮效率都较高，可以命名为进攻球员；蓝色类别的球员三分球能力为负，但综合能力较高，投篮效率一般，可以命名为防守球员。
+```{r, fig.showtext=TRUE, out.width='70%', fig.align='center', fig.cap='综合能力与三分球能力'}
+fviz_cluster(result, pca_score[, -1], labelsize = 0,
+             choose.vars = colnames(pca_score)[2:3]) + theme_light()
+```
+
+```{r, fig.showtext=TRUE, out.width='70%', fig.align='center', fig.cap='综合能力与投篮效率'}
+fviz_cluster(result, pca_score[, -1], labelsize = 0,
+             choose.vars = colnames(pca_score)[c(2, 4)]) + theme_light()
+```
+
+```{r, fig.showtext=TRUE, out.width='70%', fig.align='center', fig.cap='三分球能力与投篮效率'}
+fviz_cluster(result, pca_score[, -1], labelsize = 0,
+             choose.vars = colnames(pca_score)[c(3, 4)]) + theme_light()
+```

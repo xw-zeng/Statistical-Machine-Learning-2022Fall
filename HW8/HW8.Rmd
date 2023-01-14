@@ -1,0 +1,295 @@
+---
+title: "HW8"
+author:
+  - xw-zeng
+date: "2022-11-28"
+documentclass: ctexart
+geometry: "left=3.18cm, right=3.18cm, top=2.54cm, bottom=2.54cm"
+output:
+  rticles::ctex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(tinytex.verbose = TRUE)
+```
+
+
+\newpage
+
+# 理论推导
+
+## 1. 对偶问题
+
+软间隔最大化问题的原问题为：
+$$
+\begin{array}{ll}
+\min _{w, b, \xi} & \frac{1}{2}\|w\|^{2}+C \sum_{i=1}^{N} \xi_{i}^{2} \\
+\text { s.t. } & y_{i}\left(w \cdot x_{i}+b\right) \geqslant 1-\xi_{i}, \quad i=1,2, \cdots, N \\
+& \xi_{i} \geqslant 0, \quad i=1,2, \cdots, N
+\end{array}
+$$
+
+写出拉格朗日函数：
+$$
+L(w, b, \xi, \alpha, \mu)=\frac{1}{2}\|w\|^{2}+C \sum_{i=1}^{N} \xi_{i}-\sum_{i=1}^{N} \alpha_{i}\left\{y_{i}\left(w \cdot x_{i}+b\right)-1+\xi_{i}\right\}-\sum_{i=1}^{N} \mu_{i} \xi_{i}
+$$
+
+其中$\alpha_i \geq 0,\mu_i \geq 0$，转化为极大极小问题，首先求解极小问题，关于$w,b,\xi$求偏导：
+$$
+\begin{aligned}
+&\nabla_{w} L(w, b, \xi, \alpha, \mu)=w-\sum_{i=1}^{N} \alpha_{i} y_{i} x_{i}=0 \\
+&\nabla_{b} L(w, b, \xi, \alpha, \mu)=-\sum_{i=1}^{N} \alpha_{i} y_{i}=0 \\
+&\nabla_{\xi_{i}} L(w, b, \xi, \alpha, \mu)=C-\alpha_{i}-\mu_{i}=0
+\end{aligned}
+$$
+
+化简后可得：
+$$
+\begin{aligned}
+&w=\sum_{i=1}^{N} \alpha_{i} y_{i} x_{i}\\
+&\sum_{i=1}^{N} \alpha_{i} y_{i}=0 \\
+&C=\alpha_{i}+\mu_{i}
+\end{aligned}
+$$
+
+代入拉格朗日函数：
+$$
+\begin{aligned}
+& \frac{1}{2}\|w\|^{2}+C \sum_{i=1}^{N} \xi_{i}+\sum_{i=1}^{N} \alpha_{i}\left(1-\xi_{i}-y_{i}\left(w^{T} x_{i}+b\right)\right)-\sum_{i=1}^{N} \mu_{i} \xi_{i} \\
+=& \frac{1}{2}\|w\|^{2}+\sum_{i=1}^{N} \alpha_{i}\left(1-y_{i}\left(w^{T} x_{i}+b\right)\right)+C \sum_{i=1}^{N} \xi_{i}-\sum_{i=1}^{N} \alpha_{i} \xi_{i}-\sum_{i=1}^{N} \mu_{i} \xi_{i} \\
+=&-\frac{1}{2} \sum_{i=1}^{N} \alpha_{i} y_{i} x_{i}^{T} \sum_{i=1}^{N} \alpha_{i} y_{i} x_{i}+\sum_{i=1}^{N} \alpha_{i}+\sum_{i=1}^{N} C \xi_{i}-\sum_{i=1}^{N} \alpha_{i} \xi_{i}-\sum_{i=1}^{N} \mu_{i} \xi_{i} \\
+=&-\frac{1}{2} \sum_{i=1}^{N} \alpha_{i} y_{i} x_{i}^{T} \sum_{i=1}^{N} \alpha_{i} y_{i} x_{i}+\sum_{i=1}^{N} \alpha_{i}+\sum_{i=1}^{N}\left(C-\alpha_{i}-\mu_{i}\right) \xi_{i} \\
+=& \sum_{i=1}^{N} \alpha_{i}-\frac{1}{2} \sum_{i=1}^{N} \sum_{j=1}^{N} \alpha_{i} \alpha_{j} y_{i} y_{j} x_{i}^{T} x_{j} \\
+=& \min _{w, b, \xi} L(w, b, \alpha, \xi, \mu)
+\end{aligned}
+$$
+
+再求解极大问题，即为对偶问题：
+$$
+\begin{aligned}
+\max _{\alpha, \mu} \min _{w, b, \xi} L(w, b, \alpha, \xi, \mu) &=\max _{\alpha, \mu} \sum_{i=1}^{N} \alpha_{i}-\frac{1}{2} \sum_{i=1}^{N} \sum_{j=1}^{N} \alpha_{i} \alpha_{j} y_{i} y_{j} x_{i}^{T} x_{j} \\
+&=\max _{\alpha} \sum_{i=1}^{N} \alpha_{i}-\frac{1}{2} \sum_{i=1}^{N} \sum_{j=1}^{N} \alpha_{i} \alpha_{j} y_{i} y_{j} x_{i}^{T} x_{j}
+\end{aligned}
+$$
+
+约束条件为：
+$$
+\begin{aligned}
+&\alpha_{i}  \geq 0 \\
+&\mu_{i}  \geq 0 \\
+&C =\alpha_{i}+\mu_{i}\\
+\Rightarrow &0 \leq \alpha_i \leq C, 0 \leq \mu_i \leq C
+\end{aligned}
+$$
+
+## 2. 核方法
+
+首先看两个例子：
+
+1.\ 对$p=2,n=2$，有$\phi_2(x)=\left(x_{1}^{2}, \sqrt{2} x_{1} x_{2}, x_{2}^{2}\right)$，使得：
+$$
+\begin{aligned}
+K(x, z) &=\left(x^{T} z\right)^{2}=\left(\left(x_{1}, x_{2}\right)^{T}\left(z_{1}, z_{2}\right)\right)^{2} \\
+&=\left(x_{1} z_{1}+x_{2} z_{2}\right)^{2} \\
+&=x_{1}^{2} z_{1}^{2}+2 x_{1} z_{1} x_{2} z_{2}+x_{2}^{2} z_{2}^{2} \\
+&=\left(x_{1}^{2}, \sqrt{2} x_{1} x_{2}, x_{2}^{2}\right)^{T}\left(z_{1}^{2}, \sqrt{2} z_{1} z_{2}, z_{2}^{2}\right)^{T} \\
+&:=\phi_2(x) \cdot \phi_2(z)
+\end{aligned}
+$$
+
+2.\ 对$p=3,n=2$，有$\phi_3(x)=\left(x_{1}^{3}, \sqrt{3} x_{1}^{2} x_{2}, \sqrt{3} x_{1} x_{2}^{2}, x_{2}^{3}\right)$，使得：
+$$
+\begin{aligned}
+K(x, z) &=\left(x^{T} z\right)^{3}=\left(\left(x_{1}, x_{2}\right)^{T}\left(z_{1}, z_{2}\right)\right)^{3} \\
+&=\left(x_{1} z_{1}+x_{2} z_{2}\right)^{3} \\
+&=x_{1}^{3} z_{1}^{3}+3 x_{1}^{2} z_{1}^{2} x_{2} z_{2}+3 x_{1} z_{1} x_{2}^{2} z_{2}^{2}+x_{2}^{3} z_{2}^{3} \\
+&=\left(x_{1}^{3}, \sqrt{3} x_{1}^{2} x_{2}, \sqrt{3} x_{1} x_{2}^{2}, x_{2}^{3}\right)^{T}\left(z_{1}^{3}, \sqrt{3} z_{1}^{2} z_{2}, \sqrt{3} z_{1} z_{2}^{2}, z_{2}^{3}\right) \\
+&:=\phi_3(x) \cdot \phi_3(z)
+\end{aligned}
+$$
+
+因此，我们猜测对于任意$p,n$，都能为$K(x,z)$找到从$\mathcal{X}$到希尔伯特空间$\mathcal{H}$的映射$\phi$，使得：
+$$
+K(x,z)=\phi(x) \cdot \phi(z)
+$$
+
+令$x,z \in \mathcal{R}^n$，使用数学归纳法进行证明：
+
+当$p=1$时，有$\phi_1(x)=x$使得：
+$$
+K(x,z)=\phi_1(x) \cdot \phi_1(z)=x \cdot z
+$$
+
+假设$p=k$时，存在$\phi_k$使得：
+$$
+K(x,z)=\phi_k(x) \cdot \phi_k(z)
+$$
+
+则$p=k+1$时：
+$$
+K(x,z)=(x \cdot z)^{k+1}=(x \cdot z)^{k}(x \cdot z)=\left(\phi_k(x) \cdot \phi_k(z)\right) (x \cdot z)
+$$
+
+不妨假设$\phi_k$由以下形式变换得到：
+$$
+\phi_k(x)=\left(f_{1}(x), f_{2}(x), \cdots, f_{m}(x)\right)^{T}
+$$
+
+则有：
+$$
+\begin{aligned}
+K(x, z) & = \left(f_{1}(x) f_{1}(z)+f_{2}(x) f_{2}(z)+\ldots+f_{m}(x) f_{m}(z)\right)\left(x_{1} z_{1}+x_{2} z_{2}+\ldots+x_{n} z_{n}\right) \\ & = f_{1}(x) f_{1}(z)\left(x_{1} z_{1}+x_{2} z_{2}+\ldots+x_{n} z_{n}\right)+f_{2}(x) f_{2}(z)\left(x_{1} z_{1}+x_{2} z_{2}+\ldots+x_{n} z_{n}\right)+\ldots \\
+&\quad+f_{m}(x) f_{m}(z)\left(x_{1} z_{1}+x_{2} z_{2}+\ldots+x_{n} z_{n}\right)\\
+ & = \left(f_{1}(x) x_{1}\right)\left(f_{1}(z) z_{1}\right)+\left(f_{1}(x) x_{2}\right)\left(f_{1}(z) z_{2}\right)+\ldots+\left(f_{1}(x) x_{n}\right)\left(f_{1}(z) z_{n}\right)+\left(f_{2}(x) x_{1}\right)\left(f_{2}(z) z_{1}\right)+\ldots \\
+&\quad+\left(f_{2}(x) x_{n}\right)\left(f_{2}(z) z_{n}\right)+\left(f_{m}(x) x_{1}\right)\left(f_{m}(z) z_{1}\right)+\ldots+\left(f_{m}(x) x_{n}\right)\left(f_{m}(z) z_{n}\right) \\
+&:= \phi_{k+1}(x) \cdot \phi_{k+1}(z)
+\end{aligned}
+$$
+
+故有$\phi_{k+1}(x)=\left(f_{1}(x) x_{1}, \ldots ,f_{1}(x) x_{n}, f_{2}(x) x_{1}, \ldots, f_{2}(x) x_{n}, \ldots \ldots ,f_{m}(x) x_{1}, \ldots ,f_{m}(x) x_{n}\right)^{T}$使得$K(x,z)=(x \cdot z)^{k+1}=\phi_{k+1}(x)\cdot\phi_{k+1}(z)$，结论在$p=k+1$时也成立，得证。
+
+对任意$x_{i} \in \mathcal{X}(i=1, ..., n)$，构造$K(x, z)$关于$x_1,x_2,...,x_n$的Gram矩阵：
+$$
+K=[K_{ij}]_{n \times n}=[K(x_i,x_j)]_{n \times n}
+$$
+
+则对任意$a_1,a_2,...,a_n \in \mathcal{R}$，有：
+$$
+\begin{aligned}
+\sum_{i, j=1}^{n} a_{i} a_{j} K\left(x_{i}, x_{j}\right) &=\sum_{i, j=1}^{n} a_{i} a_{j} \left(\phi\left(x_{i}\right) \cdot \phi\left(x_{j}\right)\right) \\
+&=\left(\sum_{i} a_{i} \phi\left(x_{i}\right)\right) \cdot\left(\sum_{j} a_{j} \phi\left(x_{j}\right)\right) \\
+&=\left|\left|\sum_{i} a_{i} \phi\left(x_{i}\right)\right|\right|^{2} \geq 0
+\end{aligned}
+$$
+
+因此，$K(x, z)$关于$x_1,x_2,...,x_n$的Gram矩阵为半正定矩阵。
+
+内积的正整数幂函数满足对称性（因为内积本身就具有对称性）：
+$$
+K(x,z)=(x \cdot z)^p=(z \cdot x)^p
+$$
+
+综上所述，内积的正整数幂函数$K(x, z)=(x,z)^p$满足正定核的充要条件，是正定核函数，问题得证。
+
+\newpage
+
+# 征信系列-用户行为数据分析
+
+载入R包。
+```{r, warning=FALSE, message=FALSE}
+library(ggplot2) # plot beautiful graphs
+library(rpart) # decision tree
+library(e1071) # svm
+library(pROC) # draw ROC curve
+library(patchwork) # merge two ggplots
+```
+
+定义画ROC曲线的函数。
+```{r}
+show_roc <- function(true, pred, train_or_test){
+  roc_curve <- roc(true, pred)
+  plot(roc_curve, print.auc = TRUE, auc.polygon = TRUE, legacy.axes = TRUE,
+       grid = c(0.1, 0.2), grid.col = c('green', 'red'), max.auc.polygon = TRUE,
+       auc.polygon.col = 'skyblue', print.thres = TRUE, main = paste0('ROC Curve on ',
+          ifelse(train_or_test == 'train', 'Training', 'Test'), ' Data'))
+}
+```
+
+定义画混淆矩阵(confusion matrix)的函数。
+```{r}
+show_cm <- function(df, modelname){
+  df$pred <- df[, 2]
+  out <- ggplot(df, aes(pred, true_class, fill = Freq)) +
+    geom_tile() + geom_text(aes(label = Freq)) + 
+    scale_fill_gradient(low = 'white', high = '#3575b5') +
+    labs(x = 'Pred', y = 'True', title = paste('Confusion Matrix of', modelname),
+         fill = '是否违约') + guides(fill = 'none') + theme_light()
+  return (out)
+}
+```
+
+\newpage
+
+## 分析任务1
+
+读入数据。
+```{r}
+data <- read.csv('simudata.csv')
+```
+
+将变量`black` (是否违约)转化为因子型变量。
+```{r}
+data$black <- factor(data$black, levels = c(0, 1), labels = c('未违约', '违约'))
+```
+
+## 分析任务2
+
+按照7:3的比例划分训练集和测试集。
+```{r}
+set.seed(1234)
+idx_train <- sample(1:nrow(data), 0.7 * nrow(data))
+data_train <- data[idx_train, ]
+data_test <- data[-idx_train, ]
+```
+
+用决策树模型在训练集上进行建模。
+```{r, warning=FALSE}
+fit_rpart <- rpart(black ~ ., data_train)
+```
+
+用SVM模型在训练集上进行建模。
+```{r, warning=FALSE}
+fit_svm <- svm(black ~ ., data_train, probability = TRUE)
+```
+
+使用建立好的模型对测试集进行预测，输出预测概率，便于绘制ROC曲线。
+```{r}
+pred_rpart_prob <- predict(fit_rpart, data_test, type = 'prob')
+pred_svm_prob <- attr(predict(fit_svm, data_test, probability = TRUE), 'probabilities')
+```
+
+再输出预测类型，便于绘制混淆矩阵。
+```{r}
+pred_rpart_class <- predict(fit_rpart, data_test, type = 'class')
+pred_svm_class <- predict(fit_svm, data_test)
+```
+
+\newpage
+
+分别画出决策树模型、SVM模型在测试集上的ROC曲线。
+```{r, message=FALSE,fig.width=10,fig.height=5}
+par(mfrow=c(1,2))
+show_roc(data_test$black, pred_rpart_prob[, 1], 'test')
+show_roc(data_test$black, pred_svm_prob[, 1], 'test')
+```
+
+由上图，决策树的AUC大小为0.668，SVM的AUC大小为0.817，这说明SVM模型在该问题上的分类能力远高于决策树。
+
+分别计算两个模型的分类准确率accuracy。
+```{r}
+true_class <- data_test$black
+pred_rpart <- table(true_class, pred_rpart_class)
+pred_svm <- table(true_class, pred_svm_class)
+acc_rpart <- sum(diag(pred_rpart)) / nrow(data_test)
+acc_svm <- sum(diag(pred_svm)) / nrow(data_test)
+print(paste0('决策树的准确率为：', round(acc_rpart * 100, 2), '%'))
+print(paste0('SVM的准确率为：', round(acc_svm * 100, 2), '%'))
+```
+
+故SVM分类准确率比决策树的准确率更高，效果更好。
+
+\newpage
+
+最后分别画出决策树模型、SVM模型在测试集上的混淆矩阵。
+```{r, fig.showtext=TRUE, fig.height=5, fig.width=10}
+p1 <- show_cm(data.frame(pred_rpart), 'Decision Tree')
+p2 <- show_cm(data.frame(pred_svm), 'SVM')
+p1 + p2
+```
+
+由上图可知，SVM在预测的真正例比决策树更多，即更有能力分辨出违约用户；而两个模型对负例的预测效果相差不大。
+
+综上所述，SVM模型的效果比决策树模型好。
+
+## THE END. THANKS! ^_^

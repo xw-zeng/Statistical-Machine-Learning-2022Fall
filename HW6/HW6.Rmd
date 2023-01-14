@@ -1,0 +1,134 @@
+---
+title: "HW6"
+author:
+  - xw-zeng
+date: "2022-11-03"
+documentclass: ctexart
+geometry: "left=3.18cm, right=3.18cm, top=2.54cm, bottom=2.54cm"
+output:
+  rticles::ctex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(tinytex.verbose = TRUE)
+library(dplyr)
+library(ggplot2)
+library(e1071)
+```
+
+\newpage
+
+# 市长电话分析
+
+## 分析任务1
+
+读入市长电话训练集和测试集。
+```{r}
+data_train <- read.csv('train_set.csv', encoding = 'utf-8')
+data_test <- read.csv('test_set.csv', encoding = 'utf-8')
+```
+
+统计训练集中各个政府单位接到的市民投诉量。
+```{r}
+complaints <- data_train %>% group_by(单位名称) %>% summarise(投诉量 = n())
+complaints
+```
+
+按照投诉量降序，绘制柱状图。
+```{r, warning=FALSE}
+complaints <- complaints[order(complaints$投诉量, decreasing = TRUE), ]
+ggplot(complaints, mapping = aes(x = 单位名称, y = 投诉量, fill = 单位名称)) +
+  geom_bar(stat = 'identity', alpha = 0.6) +
+  scale_x_discrete(limits = complaints$单位名称) +
+  labs(title = '市民投诉量降序柱状图', x = '单位名称', y = '投诉量') +
+  guides(fill = 'none') +
+  theme_light()
+```
+
+由上图可知，市水务集团收到的投诉量最多，有557条；投诉量较多的第二梯队(300-400条)为市供热公司、市运输管理局，投诉量分别为330条、332条；第三梯队(200-300条)为市燃气集团、市公交集团，投诉量分别为285条、207条；投诉量最少的政府单位为市房地集团、市供电公司，投诉量分别为96条和93条，都小于100条。
+
+## 分析任务2
+
+统计每条投诉用词数。
+```{r}
+vols <- data_train[, c(1, 2)]
+vols['用词数'] <- rowSums(data_train[, 2:6236])
+vols <- vols[, -2]
+head(vols)
+```
+
+绘制投诉用词数的分布直方图。
+```{r, warning=FALSE}
+ggplot(data = vols, mapping = aes(x = 用词数)) +
+  geom_histogram(color = 'white', fill = 'skyblue2', binwidth = 10,
+                 mapping = aes(y = ..count..), alpha = 0.6) +
+  labs(title = '投诉用词数分布直方图', y = '频数', x = '用词数') +
+  theme_light()
+```
+
+用词数的分布呈右偏分布，大部分的投诉用词数都在10-50个之间，只有极少数一部分的投诉超过了50个词，说明大部分市民投诉都比较简短。
+
+## 分析任务3
+
+用箱线图表示各单位收集到投诉信息分词后总词数的差异。
+```{r, warning=FALSE}
+ggplot(vols, mapping = aes(x = 单位名称, y = 用词数, fill = 单位名称)) +
+  geom_boxplot(varwidth = TRUE, alpha = 0.6) +
+  labs(title = '单位投诉用词量分组箱线图') +
+  guides(fill = 'none') +
+  theme_light()
+```
+
+由上图可以得到以下结论：
+
+- 市房地集团投诉用词数的中位数最高，约为25个词，说明该单位收到的投诉用词量较多，但是该部门的投诉数量却在所有单位中排名倒数第二，这与我们日常生活是相符的，因为房地产相关的问题往往比较复杂，需要用较多词汇才能描述清楚。
+- 市水务集团、市公交集团、市燃气集团的用词数中位数最低，所以即使这些单位投诉数量比较多，但是用词数都是比较少的。
+- 市房地集团、市供电公司用词数的离群值较少，说明大家的问题可能都差不多复杂；其他单位的离群值较多，说明市民问题的异质性可能较大。
+
+## 分析任务4
+
+将训练集与测试集转化为0-1矩阵。
+```{r}
+dtm_train <- apply(data_train[, -1], 2, as.factor)
+dtm_test <- apply(data_test[, -1], 2, as.factor)
+```
+
+修剪词汇表，取前200个高频词作为分类器特征。
+```{r}
+wordfreq <- colSums(data_train[, 2:6236])
+index <- order(wordfreq, decreasing = TRUE)[1:200]
+```
+
+以训练集中的政府单位为因变量类别，电话文本为自变量，建立朴素贝叶斯分类器。
+```{r}
+nb <- naiveBayes(x = dtm_train[, index], y = as.factor(data_train$单位名称))
+```
+
+使用该模型对测试集电话文本进行预测。
+```{r}
+pred <- predict(nb, dtm_test[, index], type = 'class')
+```
+
+计算准确率。
+```{r}
+accuracy <- sum(as.character(data_test$单位名称) == as.character(pred)) /
+  nrow(data_test)
+print(paste0('准确率为：', accuracy))
+```
+
+计算混淆矩阵。
+```{r}
+table(as.character(data_test$单位名称), as.character(pred))
+```
+
+\newpage
+
+绘制混淆矩阵图像。
+```{r, fig.width=5, fig.height=5}
+image(table(as.character(data_test$单位名称), as.character(pred)))
+```
+
+模型准确率高达98%，即在100个测试样本中只发生了2次分类错误，混淆矩阵的深色块都集中在对角线处，说明模型效果很好。
+
+## THE END. THANKS! ^_^

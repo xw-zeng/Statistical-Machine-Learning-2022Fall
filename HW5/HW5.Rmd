@@ -1,0 +1,389 @@
+---
+title: "HW5"
+author: "xw-zeng"
+date: "2022-11-21"
+output: 
+  rmdformats::material:
+    highlight: kate
+    self_contained: true
+    thumbnails: true
+    gallery: true
+    fig_width: 8
+    fig_height: 6
+    df_print: kable
+pkgdown:
+  as_is: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(tinytex.verbose = TRUE)
+```
+
+\newpage
+
+# 客户流失预警分析
+
+安装并载入R程序包。
+```{r pkg, message=FALSE, warning=FALSE}
+##install.packages('ggplot2')
+##install.packages('patchwork')
+##install.packages('sjPlot')
+##install.packages('pROC')
+library(ggplot2) ##可视化好看
+library(patchwork) ##合并图片输出
+library(sjPlot) ##输出格式比较好看的回归模型summary包
+library(pROC) ##绘制ROC曲线
+```
+
+## 分析任务1
+
+读入训练数据和测试数据。
+```{r}
+data_train <- read.csv('sampledata.csv')
+data_test <- read.csv('preddata.csv')
+head(data_train)
+```
+
+更改`churn`变量类型为因子型。
+```{r}
+data_train$churn <- as.factor(data_train$churn)
+```
+
+## 分析任务2
+
+首先观察数据的分布，若为明显右偏分布则对其做对数处理，再绘制出自变量与因变量的箱线图。需注意这里做对数处理只是为了使箱线图的绘制效果好，至于是否需要在后续的逻辑回归模型中使用取对数后的自变量，将在后续根据模型预测效果进行判断。
+
+- 在网时长：原数据为右偏双峰分布，取对数后分布也仍然为双峰分布，但和原数据相比数据分布没有明显右偏性，故做对数处理。
+```{r}
+p1 <- ggplot(data = data_train, mapping = aes(x = tenure)) +
+  geom_histogram(color = 'white', fill = 'lightgrey', binwidth = 250,
+                 mapping = aes(y = ..density..)) +
+  geom_density(size = 0.8) +
+  labs(title = 'Histogram of Tenure') +
+  theme_light()
+p2 <- ggplot(data = data_train, mapping = aes(x = log(tenure))) +
+  geom_histogram(color = 'white', fill = 'lightgrey', binwidth = 0.2,
+                 mapping = aes(y = ..density..)) +
+  geom_density(size = 0.8) +
+  labs(title = 'Histogram of Log Tenure') +
+  theme_light()
+p1 + p2
+```
+
+- 当月花费：原数据为右偏分布，取对数后呈现左偏分布，数据分布情况没有明显的改善，不需要取对数。
+```{r}
+p1 <- ggplot(data = data_train, mapping = aes(x = expense)) +
+  geom_histogram(color = 'white', fill = 'lightgrey', binwidth = 50,
+                 mapping = aes(y = ..density..)) +
+  geom_density(size = 0.8) +
+  labs(title = 'Histogram of Expense') +
+  theme_light()
+p2 <- ggplot(data = data_train, mapping = aes(x = log(expense))) +
+  geom_histogram(color = 'white', fill = 'lightgrey', binwidth = 0.5,
+                 mapping = aes(y = ..density..)) +
+  geom_density(size = 0.8) +
+  labs(title = 'Histogram of Log Expense') +
+  theme_light()
+p1 + p2
+```
+
+- 个体的度：原数据为明显的右偏分布，取对数后数据较为接近正态分布(这里使用的对数变换是$\log(\operatorname{degree}+1)$，因为原数据中存在大量接近于0的数字，若不加1直接取对数会产生很长的左尾)，故做对数处理。
+```{r}
+p1 <- ggplot(data = data_train, mapping = aes(x = degree)) +
+  geom_histogram(color = 'white', fill = 'lightgrey', binwidth = 30,
+                 mapping = aes(y = ..density..)) +
+  geom_density(size = 0.8) +
+  labs(title = 'Histogram of Degree') +
+  theme_light()
+p2 <- ggplot(data = data_train, mapping = aes(x = log(degree + 1))) +
+  geom_histogram(color = 'white', fill = 'lightgrey', binwidth = 0.6,
+                 mapping = aes(y = ..density..)) +
+  geom_density(size = 0.8) +
+  labs(title = 'Histogram of Log Degree') +
+  theme_light()
+p1 + p2
+```
+
+- 联系强度：原数据为明显的右偏分布，取对数后数据较为接近正态分布(这里使用的对数变换是$\log(\operatorname{tightness}+1)$，因为原数据中存在大量接近于0的数字，若不加1直接取对数会产生很长的左尾)，故做对数处理。
+```{r}
+p1 <- ggplot(data = data_train, mapping = aes(x = tightness)) +
+  geom_histogram(color = 'white', fill = 'lightgrey', binwidth = 5,
+                 mapping = aes(y = ..density..)) +
+  geom_density(size = 0.8) +
+  labs(title = 'Histogram of Tightness') +
+  theme_light()
+p2 <- ggplot(data = data_train, mapping = aes(x = log(tightness + 1))) +
+  geom_histogram(color = 'white', fill = 'lightgrey', binwidth = 0.5,
+                 mapping = aes(y = ..density..)) +
+  geom_density(size = 0.8) +
+  labs(title = 'Histogram of Log Tightness') +
+  theme_light()
+p1 + p2
+```
+
+- 个体信息熵：原数据近似服从正态分布(尽管有一点点左偏)，且原数据中含有负值，故不需要也不能做对数处理。
+```{r}
+ggplot(data = data_train, mapping = aes(x = entropy)) +
+  geom_histogram(color = 'white', fill = 'lightgrey', binwidth = 0.3,
+                 mapping = aes(y = ..density..)) +
+  geom_density(size = 0.8) +
+  labs(title = 'Histogram of Entropy') +
+  theme_light()
+```
+
+- 个体度的变化：原数据基本服从正态分布，无需做对数处理。
+```{r, warning=FALSE}
+ggplot(data = data_train, mapping = aes(x = chgdegree)) +
+  geom_histogram(color = 'white', fill = 'lightgrey', binwidth = 0.08,
+                 mapping = aes(y = ..density..)) +
+  geom_density(size = 0.8) +
+  xlim(c(-1, 1)) +
+  labs(title = 'Histogram of Change in Degree') +
+  theme_light()
+```
+
+- 个体花费的变化：原数据是明显的尖峰分布，中位数在0附近，说明绝大部分客户花费的变化是很小的。同时图像呈现出两条极长的尾巴(离群值)，这说明仍然有少量客户的花费会发生较大改变，且这些客户花费改变量的方差是很大的。对于这种两端长尾、有正有负的数据做对数变换是不太合适的，所以仍然使用原数据。
+```{r}
+ggplot(data = data_train, mapping = aes(x = chgexpense)) +
+  geom_histogram(color = 'white', fill = 'lightgrey', binwidth = 0.02,
+                 mapping = aes(y = ..density..)) +
+  geom_density(size = 0.8) +
+  labs(title = 'Histogram of Change in Expense') +
+  theme_light()
+```
+
+首先绘制因变量和对数处理前后的自变量(tenure, degree, tightness)的箱线图。
+
+```{r, fig.width=12, fig.height=6}
+p1 <- ggplot(data_train, mapping = aes(x = churn, y = log(tenure), fill = churn)) +
+  geom_boxplot() + guides(fill = 'none') +
+  labs(title = 'Grouped Boxplot of Log Tenure') +
+  theme_light()
+p1_1 <- ggplot(data_train, mapping = aes(x = churn, y = tenure, fill = churn)) +
+  geom_boxplot() + guides(fill = 'none') +
+  labs(title = 'Grouped Boxplot of Tenure') +
+  theme_light()
+p2 <- ggplot(data_train, mapping = aes(x = churn, y = log(degree + 1), fill = churn)) +
+  geom_boxplot() + guides(fill = 'none') +
+  labs(title = 'Grouped Boxplot of Log Degree') +
+  theme_light()
+p2_1 <- ggplot(data_train, mapping = aes(x = churn, y = degree, fill = churn)) +
+  geom_boxplot() + guides(fill = 'none') +
+  labs(title = 'Grouped Boxplot of Degree') +
+  theme_light()
+p3 <- ggplot(data_train, mapping = aes(x = churn, y = log(tightness + 1), fill = churn)) +
+  geom_boxplot() + guides(fill = 'none') +
+  labs(title = 'Grouped Boxplot of Log Tightness') +
+  theme_light()
+p3_1 <- ggplot(data_train, mapping = aes(x = churn, y = tightness, fill = churn)) +
+  geom_boxplot() + guides(fill = 'none') +
+  labs(title = 'Grouped Boxplot of Tightness') +
+  theme_light()
+p1 + p2 + p3 + p1_1 + p2_1 + p3_1
+```
+
+我们发现做完对数处理后，数据中仍然存在较多的离群值，但是相比起原数据，效果好了很多。
+
+然后绘制因变量和剩余自变量(expense, entropy, chgdegree, chgexpense)的箱线图。
+
+```{r}
+p4 <- ggplot(data_train, mapping = aes(x = churn, y = expense, fill = churn)) +
+  geom_boxplot() + guides(fill = 'none') +
+  labs(title = 'Grouped Boxplot of Expense') +
+  theme_light()
+p5 <- ggplot(data_train, mapping = aes(x = churn, y = entropy, fill = churn)) +
+  geom_boxplot() + guides(fill = 'none') +
+  labs(title = 'Grouped Boxplot of Entropy') +
+  theme_light()
+p6 <- ggplot(data_train, mapping = aes(x = churn, y = chgdegree, fill = churn)) +
+  geom_boxplot() + guides(fill = 'none') +
+  labs(title = 'Grouped Boxplot of Change in Degree') +
+  theme_light()
+p7 <- ggplot(data_train, mapping = aes(x = churn, y = chgexpense, fill = churn)) +
+  geom_boxplot() + guides(fill = 'none') +
+  labs(title = 'Grouped Boxplot of Change in Expense') +
+  theme_light()
+p4 + p5 + p6 + p7
+```
+
+## 分析任务3
+
+### 使用原始训练集建立模型
+
+对自变量进行标准化。
+```{r}
+data_train_scaled <- data_train
+vars <- diag(var(data_train_scaled[, 2:8]))
+mean <- colMeans(data_train_scaled[, 2:8])
+data_train_scaled[, 2:8] <- scale(data_train_scaled[, 2:8])
+```
+
+以是否流失为因变量，建立逻辑回归模型，系数估计结果如下所示。
+```{r}
+fit1 <- glm(churn~., data_train_scaled[, -1], family = binomial(link = 'logit'))
+summary(fit1)
+```
+
+发现该模型中各项系数都在0.01的显著性水平下显著，模型有意义。通过$\operatorname{OR}=\exp(\operatorname{Coefficients)}$的变换得到odds ratio，如下表所示。
+
+```{r, message=FALSE}
+tab_model(fit1, show.se = TRUE, show.stat = TRUE, digits = 3, digits.rsq = 4, p.style = 'numeric_stars', string.pred = 'Coefficients', string.ci = 'CI(95%)', string.se = 'Std. Error', string.stat = 'z value', string.p = 'Pr(>|z|)', title = '自变量未经过对数处理的逻辑回归系数估计表')
+```
+
+由于在建立逻辑回归模型之前，我们已经对自变量进行了标准化处理，所以这里的odds ratio其实没有特别大的现实意义(系数估计也是)。但是我们可以通过系数估计的符号与绝对值(或odds ratio的大小)对模型结果进行一些解读。
+
+上表中的结果表示，每个自变量的系数估计都为**负值**，这意味着它们的odds ratio都小于1，即当每个自变量增加时，客户更不容易流失，这与我们的认知是相符的。由于自变量已经经过了标准化处理，故它们的量纲已经被消除了，我们可以通过比较系数估计的数值，在一定程度上对这些自变量对客户流失的影响大小进行判断。于是我们发现个体的度对于客户流失的影响是最大的(`degree`和`chgdegree`)，其他自变量与客户流失都有显著的负相关关系，这可以为运营公司减少客户流失提供指导作用。
+
+### 使用对数变换后的训练集建立模型
+
+对分析任务2中讨论的3个自变量作对数处理，然后再对训练集的自变量进行标准化。
+```{r}
+data_train_log <- data_train
+data_train_log$logtenure <- log(data_train$tenure)
+data_train_log$log1degree <- log(data_train$degree + 1)
+data_train_log$log1tightness <- log(data_train$tightness + 1)
+data_train_log <- data_train_log[, -c(2, 4, 5)]
+vars_log <- diag(var(data_train_log[, c(2:5, 7:9)]))
+mean_log <- colMeans(data_train_log[, c(2:5, 7:9)])
+data_train_log[, c(2:5, 7:9)] <- scale(data_train_log[, c(2:5, 7:9)])
+```
+
+以是否流失为因变量，建立逻辑回归模型。
+```{r}
+fit2 <- glm(churn~., data_train_log[, -1], family = binomial(link = 'logit'))
+summary(fit2)
+```
+
+发现该模型中除了`entropy`变量，其他自变量的系数估计都在0.05的显著性水平下显著。看上去该模型的显著性似乎没有上一个模型的显著性好，但是我们发现该模型的AIC为5736.4，而上一个模型的AIC为5773.6，由AIC准则，经过对数处理后的模型会更好一些。当然AIC低并不一定说明该模型的分类效果更好，我们还是需要在测试集上进行尝试后才能确定哪个模型用于预测更好。
+
+该模型的结果与上一个模型不同的地方在于`entropy`的系数估计为正值，即odds ratio>1，个体信息熵越高，客户越容易流失。这和我们的常识是相悖的，猜测该模型在解释性上出了一些问题(比如多重共线性等)。因此尝试将`entropy`变量删除后建立第三个逻辑回归模型。
+```{r}
+fit3 <- glm(churn~.-entropy, data_train_log[, -1], family = binomial(link = 'logit'))
+summary(fit3)
+```
+
+自变量的系数估计都在0.05的显著性水平下显著，且都为负值。该模型的AIC较第二个模型提升了约0.3，尽管由AIC准则该模型可能没有第二个模型拟合效果好，但是在解释性和现实意义上该模型会更好。
+
+综上所述，在下面的分析任务4中，我将使用这3个逻辑回归模型分别对训练集和测试集进行预测；分析任务5中，我将以测试集上的AUC作为指标比较这3个模型的优劣。
+
+## 分析任务4
+
+### 模型1
+
+使用建立好的逻辑回归模型，首先对训练集进行预测，得到每个用户的预测流失概率值。
+```{r}
+pred_train1 <- predict(fit1, data_train_scaled[, 2:8], type = 'response')
+head(pred_train1)
+```
+
+然后对测试集进行预测，得到每个用户的预测流失概率值。
+```{r}
+##对测试集的数据做标准化处理。
+data_test_scaled <- data_test
+for (i in 2:8){
+  data_test_scaled[, i] <- (data_test_scaled[, i] - mean[i - 1]) / sqrt(vars[i - 1])
+}
+pred_test1 <- predict(fit1, data_test_scaled[, 2:8], type = 'response')
+head(pred_test1)
+```
+
+### 模型2
+
+使用模型2，对训练集进行预测，得到每个用户的预测流失概率值。
+```{r}
+pred_train2 <- predict(fit2, data_train_log[, 2:9], type = 'response')
+head(pred_train2)
+```
+
+对测试集的数据进行对数变换后，做标准化处理。
+```{r}
+data_test_log <- data_test
+data_test_log$logtenure <- log(data_test$tenure)
+data_test_log$log1degree <- log(data_test$degree + 1)
+data_test_log$log1tightness <- log(data_test$tightness + 1)
+data_test_log <- data_test_log[, -c(2, 4, 5)]
+for (i in 2:5){
+  data_test_log[, i] <- (data_test_log[, i] - mean_log[i - 1]) / sqrt(vars_log[i - 1])
+}
+for (i in 7:9){
+  data_test_log[, i] <- (data_test_log[, i] - mean_log[i - 2]) / sqrt(vars_log[i - 2])
+}
+```
+
+然后对测试集进行预测，得到每个用户的预测流失概率值。
+```{r}
+pred_test2 <- predict(fit2, data_test_log[, c(2:5, 7:9)], type = 'response')
+head(pred_test2)
+```
+
+### 模型3
+
+使用模型3，对训练集进行预测，得到每个用户的预测流失概率值。
+```{r}
+pred_train3 <- predict(fit3, data_train_log[, 2:9], type = 'response')
+head(pred_train3)
+```
+
+然后对测试集进行预测，得到每个用户的预测流失概率值。
+```{r}
+pred_test3 <- predict(fit3, data_test_log[, c(2:5, 7:9)], type = 'response')
+head(pred_test3)
+```
+
+## 分析任务5
+
+定义画ROC曲线的函数。
+```{r}
+show_roc <- function(true, pred, train_or_test){
+  roc_curve <- roc(true, pred)
+  plot(roc_curve, print.auc = TRUE, auc.polygon = TRUE, legacy.axes = TRUE,
+       grid = c(0.1, 0.2), grid.col = c('green', 'red'), max.auc.polygon = TRUE,
+       auc.polygon.col = 'skyblue', print.thres = TRUE,
+       main = paste0('ROC Curve on ', ifelse(train_or_test == 'train', 'Training', 'Test'), ' Data'))
+}
+```
+
+### 模型1
+
+借助问题4中预测的结果，分别绘制训练集和测试集上预测结果的ROC曲线，计算相应的AUC值。
+```{r, message=FALSE, fig.width=10, fig.height=5}
+par(mfrow=c(1,2))
+show_roc(data_train_scaled$churn, pred_train1, 'train')
+show_roc(data_test_scaled$churn, pred_test1, 'test')
+```
+
+### 模型2
+
+借助问题4中预测的结果，分别绘制训练集和测试集上预测结果的ROC曲线，计算相应的AUC值。
+```{r, message=FALSE, fig.width=10, fig.height=5}
+par(mfrow=c(1,2))
+show_roc(data_train_log$churn, pred_train2, 'train')
+show_roc(data_test_log$churn, pred_test2, 'test')
+```
+
+### 模型3
+
+借助问题4中预测的结果，分别绘制训练集和测试集上预测结果的ROC曲线，计算相应的AUC值。
+```{r, message=FALSE, fig.width=10, fig.height=5}
+par(mfrow=c(1,2))
+show_roc(data_train_log$churn, pred_train3, 'train')
+show_roc(data_test_log$churn, pred_test3, 'test')
+```
+
+### 模型比较与结果解读
+
+ROC曲线越贴近左上角表示效果越好，AUC越大说明模型效果越好。我们发现使用原始数据集拟合的logistic模型的AUC(测试集和训练集)没有对数处理后模型的AUC高，而后面两个模型在AUC上完全一致(0.001的精度水平)，因此做对数处理让数据分布接近正态分布能够提高逻辑回归的预测效果(至少在该数据集上是这样的)，而是否删除`entropy`变量对分类效果并没有显著影响(二者区别仅在于最佳阈值不同)。综上，考虑到模型的预测效果与现实意义，模型3是最优的。下面对模型3的分类效果进行分析。
+
+模型3在训练集上的AUC大小约为0.776，与1相比还有一段距离，但也比完全随机的模型0.5高了不少，所以模型效果说不上很好也说不上坏，中等水平吧。该模型在测试集上的表现甚至比在训练集上的表现还要好一点，AUC值从0.776上升至了0.784，不过变化不大。这说明模型既没有过拟合，也没有欠拟合，拟合效果还是不错的。
+
+但是我们还需要考虑一下样本不均衡的问题。训练数据集中`churn`的样本比例非常不均衡，客户流失率只有1.25%，这可能会导致模型训练时较难从样本量较少的类中提取出规律，且训练后得到的模型更偏向于保守，不敢预测正例而倾向于预测负例（因为预测负例正确的可能性远高于预测正例）。这一点其实已经在上面的ROC曲线图体现出来，该模型训练集和测试集的最优阈值分别为0.014和0.010，与1相比实在过小。要解决样本不均衡问题通常可以使用对数据过采样或欠采样等方法，但这就不在我们本次作业范围内了。
+
+我们可以简单看一下混淆矩阵(分别对训练集和测试集选择先前计算出的最优阈值0.014和0.010)。
+```{r}
+table(ifelse(pred_train3 > 0.014, 1, 0), data_train_log$churn)
+table(ifelse(pred_test3 > 0.010, 1, 0), data_test_log$churn)
+```
+
+从混淆矩阵中可以看出，为了得到较多的真正例，模型将10000以上个未流失客户也预测为了流失客户，模型的分类预测效果其实并不是很好。但是本次数据分析的背景是为运营商做客户流失预警分析以帮助运营商针对相应客户制定策略、减少客户流失，因此预测的重点是在成本约束下(不可能对全部客户都实行优惠策略)找到尽可能多的可能会流失的客户，所以从结果来看，该模型基本是能够达到帮助运营商的目的的。
+

@@ -1,0 +1,288 @@
+---
+title: "HW3"
+author: "xw-zeng"
+date: "2022-10-18"
+output: 
+  rmdformats::material:
+    highlight: kate
+    self_contained: true
+    thumbnails: true
+    gallery: true
+    fig_width: 6
+    fig_height: 4
+    df_print: kable
+pkgdown:
+  as_is: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 合租模式下的租房价格分析
+
+安装并载入R程序包。不过大部分包其实不是必要的，只是为了让输出格式和图像变得好看一点~
+```{r pkg, message=FALSE, warning=FALSE}
+##install.packages('DT')
+##install.packages('gtsummary')
+##install.packages('ggplot2')
+##install.packages('dplyr')
+##install.packages('sjPlot')
+##install.packages('forestmodel')
+##install.packages('ggResidpanel')
+library(DT) ##预览表格数据
+library(gtsummary) ##输出格式比较好看的对定性变量数据的汇总统计包
+library(ggplot2) ##可视化好看
+library(dplyr) ##数据清洗
+library(sjPlot) ##输出格式比较好看的回归模型summary包
+library(forestmodel) ##绘制森林图
+library(ggResidpanel) ##基于ggplot2绘制回归诊断图
+library(car) ##求方差膨胀因子
+```
+
+## 分析任务1
+
+读取数据，修改列名为中文，查看数据。
+```{r}
+data <- read.csv('data.csv')
+colnames(data) <- c('月租金', '卧室数', '厅数', '卫生间数', '租赁房间面积', '租赁房间类型', '所在楼层', '邻近地铁', '所在城区', '供暖方式')
+DT::datatable(data)
+```
+
+将定性变量的数据类型更改为因子型(factor)。
+```{r}
+for (i in 6:10){data[, i] <- as.factor(data[, i])}
+```
+
+汇总统计5个定量变量(最小值、下四分位数、中位数、平均数、上四分位数、最大值)。
+```{r}
+summary(data[, 1:5])
+```
+
+汇总统计5个定性变量。
+```{r}
+tbl_summary(data[, 6:10])
+```
+
+## 分析任务2
+
+绘制总体数据中月租金(rent)的直方图。
+```{r}
+ggplot(data = data,mapping = aes(x = 月租金)) +
+  geom_histogram(color = 'white', fill = 'skyblue2', binwidth = 200,
+                 mapping = aes(y = ..count..), alpha = 0.6) +
+  labs(title = '月租金直方图', y = '频数') +
+  theme_light()
+```
+
+由直方图可知，基本所有房源的月租金都处于1500RMB-5000RMB之间。月租金的分布大致为**右偏分布**，即月租金的中位数2690小于其平均值2798，这说明中低月租(2000RMB-3000RMB)的房源较多，高月租的房源较少。
+
+## 分析任务3
+
+计算不同城区(region)租房平均价格。
+```{r}
+##把数据按照所在城区分组，分别统计对应城区的月租金的平均数。
+rent_mean <- data %>% group_by(所在城区) %>% summarise('平均租金' = mean(月租金))
+##把新生成的数据按照平均租金降序排列，便于后续数据可视化。
+rent_mean <- rent_mean[order(rent_mean$平均租金, decreasing = TRUE), ]
+```
+
+选取平均租金最高的8个城区，绘制降序平均租金柱状图。
+```{r}
+ggplot(rent_mean[1:8, ], mapping = aes(x = 所在城区, y = 平均租金, fill = 所在城区)) +
+  geom_bar(stat = 'identity', alpha = 0.6) +
+  scale_x_discrete(limits = rent_mean$所在城区[1:8]) +
+  labs(title = '降序平均租金柱状图') +
+  guides(fill = 'none') +
+  theme_light()
+```
+
+由柱状图可知，中心城区(西城、海淀、朝阳、东城)的平均月租金比偏远城区(房山、顺义、大兴、通州、昌平等)的平均月租金高，其中西城的平均月租金最高，房山最低，其差距高达2000RMB。
+
+## 分析任务4
+
+绘制月租金(rent)-城区(region)分组箱线图。
+```{r}
+ggplot(data, mapping = aes(x = 所在城区, y = 月租金, fill = 所在城区)) +
+  geom_boxplot(varwidth = TRUE, alpha = 0.6) +
+  scale_x_discrete(limits = rent_mean$所在城区) +
+  labs(title = '月租金(rent)-城区(region)分组箱线图') +
+  guides(fill = 'none') +
+  theme_light()
+```
+
+从这张分组箱线图中我们可以得到和**分析任务3**基本相同的结论：中心城区的月租金比偏远城区的月租金高。如果按照月租金高低对11个城区进行划分，则西城、海淀、朝阳、东城属于第一梯度，月租金最高；石景山、丰台、昌平属于第二梯度；通州、大兴、顺义属于第三梯度；房山属于第四梯度，月租金最低。这四个梯度的月租金的**组内差异较小**，**组间差异较大**。另外，与上个任务不同的是，这里的比较标准是每个城区的**中位数**(即箱体中间的横线高低)。
+
+从上图我们还能得出其他相关的信息。每个箱体的宽度表示每个城区的样本量大小，朝阳区的房源最多，其次是通州、昌平、丰台等城区，而西城、东城、房山的房源最少。大部分城区都有离群值存在(即小于下四分位数-1.5\*四分位间距，或大于上四分位数+1.5\*四分位间距)，且大部分都为高于上四分位数+1.5\*四分位间距的离群点，这说明即使条件和地理位置再不好，也极少出现租金特别低的情况。这些离群点存在的原因可能是除了所在城区这一变量之外，还存在着其他对月租金有显著影响的因素，因此我们需要建立线性回归模型进行研究。
+
+## 分析任务5
+
+为因子类型指定基准组。
+
+- 租赁房间变量以“次卧”作为基准组。
+- 所在楼层变量以“低楼层”作为基准组。
+- 邻近地铁变量以“否”作为基准组。
+- 所在城区变量以“石景山”作为基准组。
+- 供暖方式变量以“自采暖”作为基准组。
+```{r}
+data <- data %>%
+  mutate(租赁房间类型 = relevel(租赁房间类型, ref = '次卧'),
+         所在楼层 = relevel(所在楼层, ref = '低楼层'),
+         邻近地铁 = relevel(邻近地铁, ref = '否'),
+         所在城区 = relevel(所在城区, ref = '石景山'),
+         供暖方式 = relevel(供暖方式, ref = '自采暖'))
+```
+
+将数据集按照8:2的比例，划分为训练集和测试集。
+```{r}
+set.seed(2022)
+##随机生成训练集的索引。
+idx_train <- sample(1:nrow(data), 0.8 * nrow(data))
+##划分训练集和测试集。
+data_train <- data[idx_train, ]
+data_test <- data[-idx_train, ]
+```
+
+使用训练集数据建立以月租金(rent)为因变量，其余为自变量的线性回归模型。
+```{r}
+fit <- lm(月租金~., data_train)
+##生成回归系数表(对回归系数、标准误、t value都近似至三位小数)。
+tab_model(fit, show.ci = FALSE, show.se = TRUE, show.stat = TRUE, digits = 3, digits.rsq = 4, p.style = 'numeric_stars', string.pred = 'Coefficients', string.se = 'Std. Error', string.stat = 't value', string.p = 'Pr(>|t|)', title = '回归系数表')
+```
+
+因为该模型中存在通过t检验的回归系数，故该模型一定通过F检验。调整后R方为0.6518，说明月租金的波动有65.18%可以被模型中的自变量解释。
+
+绘制该回归模型的森林图，以清晰直观地观察回归模型中的系数。
+```{r warning=FALSE}
+forest_model(fit, format_options = forest_model_format_options(shape = 18, point_size = 5))
+```
+
+以0.05作为显著性水平，简单观察后发现，定量变量在模型中的回归系数全部具有显著性。卧室数、厅数对月租金有显著负向影响，而卫生间数、租赁房间面积对月租金有显著正向影响。这与我们的常识相符。因为房源卧室数、厅数更多，代表客户要和更多人同住屋檐下，住房体验更差；卫生间数更多、租赁房间面积更大，代表客户的生活空间更自由，住房体验更好，自然月租金价格更高。
+
+讨论完了定量变量，我们来看定性变量。
+
+- 租赁房间的类型对月租金没有显著影响，我猜想这是因为该变量被租赁房间面积解释了，根据常识，主卧的房间面积应该大于次卧的房间面积。
+- 中楼层的月租金比低楼层的月租金显著要低，但高楼层与低楼层却没有显著差异。这可能是因为中楼层爬楼梯很累、房源不一定有电梯，客户住房体验差；低楼层和高楼层则较为方便客户(低楼层爬楼梯轻松、高楼层的楼栋一般都有电梯)，月租金价格更高。
+- 邻近地铁的房源的月租金比不邻近地铁的显著要高，这是因为四周交通便利的房源更方便客户通勤和生活。是否邻近地铁的回归系数绝对值较大(274.82)，是月租金的重要影响因素。
+- 所在城区以石景山作为基准组，朝阳、东城、丰台、海淀、西城的月租金比石景山显著要高，昌平与石景山没有显著差异，大兴、房山、顺义、通州的月租金比石景山显著要低。由森林图可知所在城区大部分哑变量的回归系数的绝对值都很大(偏离中线幅度较大)，故房源的地理位置是影响月租金的重要因素。
+- 供暖方式为集中供暖的房源月租金比自采暖的显著要高。
+
+现在对线性回归模型的结果进行解读。**当控制其他因素不变时：**
+
+- **卧室数**每增加1个，月租金平均降低91.56元。
+- **厅数**每增加1个，月租金平均降低220.87元。
+- **卫生间数**每增加1个，月租金平均增加197.59元。
+- **租赁房间面积**每增加1平方米，月租金平均增加78.27元。
+- **租赁房间类型**：主卧与次卧的月租金没有显著差异。
+- **所在楼层**：中楼层比低楼层的月租金平均低了62.63元，高楼层与低楼层的月租金没有显著差异。
+- **邻近地铁**：邻近地铁比不邻近地铁的房源月租金平均高了274.82元。
+- **所在城区**：以石景山作为基准组，昌平与石景山的月租金没有显著差异；朝阳、东城、丰台、海淀、西城比石景山的月租金分别平均高了649.85元、538.68元、126.44元、903.31元、955.81元；大兴、房山、顺义、通州比石景山的月租金分别平均低了411.93元、801.06元、461.24元、367.74元。
+- **供暖方式**：供暖方式为集中供暖的房源比自采暖的房源月租金平均高了158.92元。
+
+## 分析任务6
+
+对上面的回归模型利用BIC准则进行变量选择。
+```{r}
+##stepwise-selection
+step(fit, direction = 'both', k = log(nrow(data_train)))
+```
+
+虽然上面步骤中显示的仍然是AIC，但我已经通过把`step`中的参数`k`(模型自变量个数$d$的惩罚系数)修改为$logN$，其中$N$为数据集中的样本个数，故此时的变量选择准则就是**BIC准则**。
+
+$$
+AIC = -{\frac 2 N}L(\beta)+2{\frac d N}\\
+BIC = -2L(\beta)+(logN)d
+$$
+
+使用逐步选择(stepwise-selection，对应`step`中的参数`direction`='both')的变量选择方法，以BIC信息准则作为判断标准，最终模型中留下的自变量为：卧室数、卫生间数、租赁房间面积、邻近地铁、所在城区、供暖方式。以这些变量作为自变量，使用训练集的数据建立新的线性回归模型。
+```{r}
+##删除厅数、租赁房间类型、所在楼层这三个变量(分别对应数据的第3、6、7列)，建立线性回归模型。
+fit <- lm(月租金~., data_train[, -c(3, 6, 7)])
+##生成回归系数表(对回归系数、标准误、t value都近似至三位小数)。
+tab_model(fit, show.ci = FALSE, show.se = TRUE, show.stat = TRUE, digits = 3, digits.rsq = 4, p.style = 'numeric_stars', string.pred = 'Coefficients', string.se = 'Std. Error', string.stat = 't value', string.p = 'Pr(>|t|)', title = '使用BIC准则进行变量选择后的回归系数表')
+```
+
+减少了3个自变量(厅数、租赁房间类型、所在楼层)后，新的回归模型调整后R方为0.6504，只比上一个回归模型的调整后R方低了0.0014，说明**变量选择过程基本没有带来信息损失**。新的模型回归系数(除了所在城区中的昌平在0.1显著性水平下显著，不在0.05显著性水平下显著)都通过了t检验，回归模型一定通过F检验，说明模型效果很好。
+
+现在对新线性回归模型的结果进行解读。**当控制其他因素不变时：**
+
+- **卧室数**每增加1个，月租金平均降低92.21元。
+- **卫生间数**每增加1个，月租金平均增加149.37元。
+- **租赁房间面积**每增加1平方米，月租金平均增加77.63元。
+- **邻近地铁**：邻近地铁比不邻近地铁的房源月租金平均高了276.09元。
+- **所在城区**：以石景山作为基准组，昌平与石景山的月租金没有显著差异；朝阳、东城、丰台、海淀、西城比石景山的月租金分别平均高了653.35元、541.40元、127.41元、903.82元、952.20元；大兴、房山、顺义、通州比石景山的月租金分别平均低了409.61元、799.40元、467.38元、366.95元。
+- **供暖方式**：供暖方式为集中供暖的房源比自采暖的房源月租金平均高了156.85元。
+
+## 分析任务7
+
+定义$k$折交叉验证的函数。
+```{r}
+cross_valid <- function(df, k){
+  ##给每个样本编号。
+  idx <- sample(1:k, nrow(df), replace = TRUE)
+  rmse_train <- c()
+  rmse_test <- c()
+  ##循环k次。
+  for (i in 1:k){
+    ##根据编号将数据集划分为训练集和测试集。
+    data_train <- df[idx != i, ]
+    data_test <- df[idx == i, ]
+    ##用训练集训练线性回归模型。
+    fit <- lm(月租金~., data_train)
+    ##用拟合出的模型在测试集上做预测。
+    pred <- predict(fit, data_test)
+    ##计算RMSE(均方根误差)。
+    rmse_train <- c(rmse_train, sqrt(mean((fit$fitted.values - data_train$月租金) ^ 2)))
+    rmse_test <- c(rmse_test, sqrt(mean((pred - data_test$月租金) ^ 2)))
+  }
+  ##返回k个模型在训练集上的RMSE和在测试集上的RMSE。
+  structure(list(rmse_train = rmse_train, rmse_test = rmse_test))
+}
+```
+
+对BIC选择后的模型重复进行50次的五折交叉验证，以减少抽样误差。
+```{r}
+rmse <- c()
+rmse_df <- data.frame('time' = NA, 'type' = NA, 'rmse' = NA)
+##设置随机数种子，使结果可重复
+set.seed(1)
+for (j in 1:50){
+  result <- cross_valid(data[, -c(3, 6, 7)], 5)
+  ##收集每次五折交叉验证中RMSE分别在训练集和测试集上的值
+  rmse_df <- rbind(na.omit(rmse_df), data.frame('time' = (j - 1) * 5 + rep(1:5, 2), 'type' = c(rep('训练集', 5), rep('测试集', 5)), 'rmse' = c(result[[1]], result[[2]])))
+}
+##分别计算训练集和测试集上250个RMSE的均值
+rmse_train_mean <- mean(rmse_df$rmse[which(rmse_df$type == '训练集')])
+rmse_test_mean <- mean(rmse_df$rmse[which(rmse_df$type == '测试集')])
+print(paste('50次五折交叉验证的训练集的RMSE均值为', rmse_train_mean, '。', sep = '')); print(paste('50次五折交叉验证的测试集的RMSE均值为', rmse_test_mean, '。', sep = ''))
+```
+
+BIC选择后的模型在**测试集**上的RMSE均值约为455.36，和**训练集**453.82相差不大，似乎预测效果还是不错的。但是均值并不能反映数据的所有信息，故再通过作图查看二者差异。
+```{r}
+ggplot(rmse_df, mapping = aes(x = time, y = rmse, color = type)) +
+  geom_line() + scale_x_continuous(expand = c(0, 0)) +
+  labs(title = '训练集和测试集RMSE折线图', x = '训练次数', y = 'RMSE') +
+  theme_light()
+```
+
+由图可知，测试集和训练集的RMSE的均值相差不大，但是测试集RMSE的波动幅度明显高于训练集RMSE，可见该线性模型的预测稳定性仍有待提高。
+
+## 模型诊断
+
+最后对BIC选择后的回归模型进行回归诊断。
+```{r}
+resid_panel(fit, plots = c('resid', 'qq', 'ls', 'cookd'))
+```
+
+由residual plot可知，残差与因变量大小无关，都在0上下波动，两侧分布均匀。但是location-scale plot中显示出随着因变量月租金的增加，残差的方差也在增加，存在**异方差**的问题。Q-Q plot说明了残差**不服从正态分布**，右侧实际的分位数明显高于理论的分位数。Cook's D plot说明数据中没有很明显的离群值。
+
+对于回归诊断出的这些问题，可以通过对因变量(月租金)**取对数**来改善。
+
+检查模型是否存在多重共线性问题。
+```{r}
+vif(fit)
+```
+
+方差膨胀因子VIF都在1左右，非常小，说明模型不存在多重共线性问题，这是因为先前变量选择的操作能够很好地规避该问题。
+
+## THE END. THANKS! ^_^

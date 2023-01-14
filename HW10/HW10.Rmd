@@ -1,0 +1,67 @@
+---
+title: "HW10"
+author:
+  - xw-zeng
+date: "2022-12-20"
+documentclass: ctexart
+geometry: "left=3.18cm, right=3.18cm, top=2.54cm, bottom=2.54cm"
+output:
+  rticles::ctex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(tinytex.verbose = TRUE)
+```
+
+## Problem 1
+
+\begin{figure}[h]
+\includegraphics[width=14cm]{1.jpg}
+\vspace{-0.2cm}
+\end{figure}
+
+## Problem 2
+
+导入样本点。
+```{r}
+X <- data.frame(matrix(c(2,4,5,5,6,8,2,3,3,4,5,7),6,2)); X
+```
+
+计算样本协方差矩阵。
+```{r}
+covX <- cov(X); covX
+```
+
+### 1. 基于样本协方差矩阵
+
+对样本协方差矩阵进行特征值分解，得到特征值与相应的特征向量。
+```{r}
+lambda <- eigen(covX)$values; lambda
+a <- eigen(covX)$vectors; a
+```
+
+计算得到主成分。
+```{r}
+Y <- t(a) %*% t(as.matrix(X))
+t(Y)
+```
+
+### 2. 基于样本相关系数矩阵
+
+计算样本相关系数矩阵。
+```{r}
+corX <- cor(X)
+```
+
+对样本相关系数矩阵进行特征值分解，得到特征值与相应的特征向量。
+```{r}
+lambda <- eigen(corX)$values; lambda
+a <- eigen(corX)$vectors; a
+```
+
+计算得到主成分。
+```{r}
+Y <- t(a) %*% t(as.matrix(X))
+t(Y)
+```
